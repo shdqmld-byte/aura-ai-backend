@@ -1,0 +1,165 @@
+/**
+ * Test script untuk Aura AI Backend
+ * Run dengan: node test-server.js
+ */
+
+const axios = require('axios');
+
+// Ganti dengan URL server kamu
+const SERVER_URL = 'http://localhost:3000';
+// Atau jika sudah deploy: https://your-app.up.railway.app
+
+console.log('🧪 Testing Aura AI Backend Server...\n');
+
+// Test 1: Health Check
+async function testHealthCheck() {
+  try {
+    console.log('1️⃣ Testing Health Check...');
+    const response = await axios.get(`${SERVER_URL}/`);
+    console.log('✅ Health Check OK');
+    console.log('   Response:', response.data);
+    console.log('');
+    return true;
+  } catch (error) {
+    console.error('❌ Health Check Failed:', error.message);
+    return false;
+  }
+}
+
+// Test 2: Simple Text Message
+async function testSimpleMessage() {
+  try {
+    console.log('2️⃣ Testing Simple Message...');
+    const response = await axios.post(`${SERVER_URL}/api/gemini`, {
+      message: 'Say hello in one sentence',
+      userId: 'test-user-123'
+    });
+    
+    if (response.data.success) {
+      console.log('✅ Simple Message OK');
+      console.log('   AI Response:', response.data.response.substring(0, 100) + '...');
+      console.log('');
+      return true;
+    } else {
+      console.error('❌ Unexpected response format');
+      return false;
+    }
+  } catch (error) {
+    console.error('❌ Simple Message Failed:', error.response?.data || error.message);
+    return false;
+  }
+}
+
+// Test 3: Long Message
+async function testLongMessage() {
+  try {
+    console.log('3️⃣ Testing Long Message...');
+    const longMessage = 'Explain quantum computing in detail. ' + 'Tell me more. '.repeat(50);
+    
+    const response = await axios.post(`${SERVER_URL}/api/gemini`, {
+      message: longMessage,
+      userId: 'test-user-456'
+    });
+    
+    if (response.data.success) {
+      console.log('✅ Long Message OK');
+      console.log('   Response length:', response.data.response.length, 'chars');
+      console.log('');
+      return true;
+    }
+  } catch (error) {
+    console.error('❌ Long Message Failed:', error.response?.data || error.message);
+    return false;
+  }
+}
+
+// Test 4: Invalid Request (no message)
+async function testInvalidRequest() {
+  try {
+    console.log('4️⃣ Testing Invalid Request (should fail)...');
+    const response = await axios.post(`${SERVER_URL}/api/gemini`, {
+      userId: 'test-user-789'
+      // No message field
+    });
+    
+    console.error('❌ Should have failed but didn\'t');
+    return false;
+  } catch (error) {
+    if (error.response?.status === 400) {
+      console.log('✅ Invalid Request Handled Correctly');
+      console.log('   Error message:', error.response.data.error);
+      console.log('');
+      return true;
+    } else {
+      console.error('❌ Unexpected error:', error.message);
+      return false;
+    }
+  }
+}
+
+// Test 5: Too Long Message (should fail)
+async function testTooLongMessage() {
+  try {
+    console.log('5️⃣ Testing Too Long Message (should fail)...');
+    const tooLongMessage = 'x'.repeat(10000); // 10k characters
+    
+    const response = await axios.post(`${SERVER_URL}/api/gemini`, {
+      message: tooLongMessage,
+      userId: 'test-user-999'
+    });
+    
+    console.error('❌ Should have failed but didn\'t');
+    return false;
+  } catch (error) {
+    if (error.response?.status === 400) {
+      console.log('✅ Too Long Message Rejected Correctly');
+      console.log('   Error message:', error.response.data.error);
+      console.log('');
+      return true;
+    } else {
+      console.error('❌ Unexpected error:', error.message);
+      return false;
+    }
+  }
+}
+
+// Run all tests
+async function runAllTests() {
+  console.log('╔════════════════════════════════════════╗');
+  console.log('║   AURA AI BACKEND SERVER TEST SUITE   ║');
+  console.log('╚════════════════════════════════════════╝\n');
+  console.log(`Server URL: ${SERVER_URL}\n`);
+  
+  const results = [];
+  
+  results.push(await testHealthCheck());
+  results.push(await testSimpleMessage());
+  results.push(await testLongMessage());
+  results.push(await testInvalidRequest());
+  results.push(await testTooLongMessage());
+  
+  // Summary
+  console.log('═══════════════════════════════════════');
+  console.log('📊 TEST SUMMARY');
+  console.log('═══════════════════════════════════════');
+  
+  const passed = results.filter(r => r).length;
+  const total = results.length;
+  
+  console.log(`Tests Passed: ${passed}/${total}`);
+  console.log(`Tests Failed: ${total - passed}/${total}`);
+  
+  if (passed === total) {
+    console.log('\n✅ ALL TESTS PASSED! Server is working correctly.');
+  } else {
+    console.log('\n⚠️  Some tests failed. Please check the errors above.');
+  }
+  
+  console.log('═══════════════════════════════════════\n');
+}
+
+// Run tests
+runAllTests().catch(error => {
+  console.error('Fatal error running tests:', error);
+  process.exit(1);
+});
