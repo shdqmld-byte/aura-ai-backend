@@ -1,19 +1,25 @@
 /**
- * Aura AI - Gemini API Proxy Server
- * Deploy ke Railway.app atau Render.com
+ * Aura AI - Complete Backend Server
+ * - Gemini API Proxy
+ * - Cloudinary Signed Upload
+ * Deploy ke Vercel
  */
 
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
+const crypto = require('crypto');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
+// =====================================
+// MIDDLEWARE
+// =====================================
+
 app.use(cors({
-  origin: '*', // Allow all origins (bisa dibatasi nanti)
+  origin: '*', // Allow all origins
   methods: ['GET', 'POST'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -34,21 +40,25 @@ app.use((req, res, next) => {
 app.get('/', (req, res) => {
   res.json({
     status: 'OK',
-    message: 'Aura AI - Gemini API Proxy Server',
-    version: '1.0.0',
+    message: 'Aura AI - Complete Backend Server',
+    version: '1.0.1',
     endpoints: {
       health: 'GET /',
-      gemini: 'POST /api/gemini'
+      gemini: 'POST /api/gemini',
+      cloudinary: 'POST /api/cloudinary/signature'
     }
   });
 });
 
-// Health check (untuk Railway monitoring)
+// Health check (untuk monitoring)
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
-// Main Gemini API endpoint
+// =====================================
+// GEMINI API ENDPOINT
+// =====================================
+
 app.post('/api/gemini', async (req, res) => {
   try {
     const { message, image, userId } = req.body;
@@ -125,7 +135,7 @@ app.post('/api/gemini', async (req, res) => {
       if (candidate.content && candidate.content.parts && candidate.content.parts.length > 0) {
         const aiResponse = candidate.content.parts[0].text;
         
-        console.log(`✅ Success - Response length: ${aiResponse.length} chars`);
+        console.log(`✅ Gemini Success - Response length: ${aiResponse.length} chars`);
         
         return res.json({
           success: true,
@@ -138,7 +148,7 @@ app.post('/api/gemini', async (req, res) => {
     throw new Error('Invalid response format from Gemini API');
 
   } catch (error) {
-    console.error('Error processing request:', error.message);
+    console.error('Error processing Gemini request:', error.message);
 
     // Handle Axios errors
     if (error.response) {
@@ -188,13 +198,81 @@ app.post('/api/gemini', async (req, res) => {
   }
 });
 
+// =====================================
+// CLOUDINARY SIGNED UPLOAD ENDPOINT
+// =====================================
+
+app.post('/api/cloudinary/signature', async (req, res) => {
+  try {
+    const { timestamp } = req.body;
+    
+    // Validation
+    if (!timestamp) {
+      return res.status(400).json({ 
+        error: 'Timestamp is required' 
+      });
+    }
+    
+    // Get credentials from environment variables
+    const CLOUDINARY_API_KEY = process.env.CLOUDINARY_API_KEY;
+    const CLOUDINARY_API_SECRET = process.env.CLOUDINARY_API_SECRET;
+    const CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME;
+    
+    if (!CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET || !CLOUD_NAME) {
+      console.error('ERROR: Missing Cloudinary credentials');
+      return res.status(500).json({ 
+        error: 'Server configuration error' 
+      });
+    }
+    
+    // Build params to sign
+    const paramsToSign = {
+      timestamp: timestamp,
+      upload_preset: 'aura_chat'
+    };
+    
+    // Sort params alphabetically and create string
+    const sortedParams = Object.keys(paramsToSign)
+      .sort()
+      .map(key => `${key}=${paramsToSign[key]}`)
+      .join('&');
+    
+    // Create SHA-1 signature
+    const signature = crypto
+      .createHash('sha1')
+      .update(sortedParams + CLOUDINARY_API_SECRET)
+      .digest('hex');
+    
+    console.log(`✅ Cloudinary Signature generated successfully`);
+    
+    res.json({
+      success: true,
+      signature: signature,
+      timestamp: timestamp,
+      api_key: CLOUDINARY_API_KEY,
+      cloud_name: CLOUD_NAME
+    });
+    
+  } catch (error) {
+    console.error('Error generating Cloudinary signature:', error);
+    res.status(500).json({ 
+      error: 'Failed to generate signature' 
+    });
+  }
+});
+
+// =====================================
+// ERROR HANDLERS
+// =====================================
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({
     error: 'Endpoint not found',
     availableEndpoints: {
       health: 'GET /',
-      gemini: 'POST /api/gemini'
+      gemini: 'POST /api/gemini',
+      cloudinary: 'POST /api/cloudinary/signature'
     }
   });
 });
@@ -207,14 +285,20 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server
+// =====================================
+// START SERVER
+// =====================================
+
 app.listen(PORT, () => {
   console.log('=================================');
-  console.log('✅ Aura AI Proxy Server Started');
+  console.log('✅ Aura AI Backend Server Started');
   console.log('=================================');
   console.log(`Port: ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`Gemini API Key: ${process.env.GEMINI_API_KEY ? '✅ Set' : '❌ Missing'}`);
+  console.log(`Cloudinary API Key: ${process.env.CLOUDINARY_API_KEY ? '✅ Set' : '❌ Missing'}`);
+  console.log(`Cloudinary API Secret: ${process.env.CLOUDINARY_API_SECRET ? '✅ Set' : '❌ Missing'}`);
+  console.log(`Cloudinary Cloud Name: ${process.env.CLOUDINARY_CLOUD_NAME ? '✅ Set' : '❌ Missing'}`);
   console.log('=================================');
 });
 
