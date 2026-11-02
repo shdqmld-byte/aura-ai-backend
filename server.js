@@ -109,14 +109,28 @@ app.post('/api/gemini', async (req, res) => {
       text: message
     });
 
-    const requestBody = {
-      contents: [{
-        parts: parts
-      }]
-    };
+        const contents = [];
+
+    if (req.body.history && Array.isArray(req.body.history) && req.body.history.length > 0) {
+      for (const h of req.body.history) {
+        if (h.text) {
+          contents.push({
+            role: h.role === 'user' ? 'user' : 'model',
+            parts: [{ text: h.text }]
+          });
+        }
+      }
+    }
+
+    contents.push({
+      role: 'user',
+      parts: parts
+    });
+
+    const requestBody = { contents };
 
     // Call Gemini API
-    const MODEL = 'gemini-2.0-flash-exp';
+    const MODEL = 'gemini-2.5-flash';
     const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
     console.log(`Calling Gemini API for user: ${userId || 'anonymous'}`);
