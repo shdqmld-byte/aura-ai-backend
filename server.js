@@ -129,33 +129,58 @@ app.post('/api/gemini', async (req, res) => {
 
     const requestBody = { contents };
 
-    // Call Gemini API
-    const MODEL = 'gemini-2.5-flash';
-    const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+    // Call Gemini API with model fallback chain to prevent rate limit (429) & demand spikes (503)
+    const MODELS = [
+      'gemini-2.5-flash-lite',
+      'gemini-flash-lite-latest',
+      'gemini-3.1-flash-lite',
+      'gemini-3.5-flash-lite',
+      'gemini-3.8-flash',
+      'gemini-2.5-flash'
+    ];
 
-    console.log(`Calling Gemini API for user: ${userId || 'anonymous'}`);
+    let lastError = null;
+    let aiResponse = null;
 
-    const response = await axios.post(API_URL, requestBody, {
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      timeout: 30000 // 30 seconds
-    });
+    for (const model of MODELS) {
+      try {
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+        console.log(`Calling Gemini API (${model}) for user: ${userId || 'anonymous'}`);
 
-    // Parse response
-    if (response.data.candidates && response.data.candidates.length > 0) {
-      const candidate = response.data.candidates[0];
-      
-      if (candidate.content && candidate.content.parts && candidate.content.parts.length > 0) {
-        const aiResponse = candidate.content.parts[0].text;
-        
-        console.log(`✅ Gemini Success - Response length: ${aiResponse.length} chars`);
-        
-        return res.json({
-          success: true,
-          response: aiResponse
+        const response = await axios.post(API_URL, requestBody, {
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          timeout: 25000 // 25 seconds
         });
+
+        if (response.data.candidates && response.data.candidates.length > 0) {
+          const candidate = response.data.candidates[0];
+          if (candidate.content && candidate.content.parts && candidate.content.parts.length > 0) {
+            aiResponse = candidate.content.parts[0].text;
+            console.log(`✅ Gemini Success [${model}] - Response length: ${aiResponse.length} chars`);
+            break;
+          }
+        }
+      } catch (err) {
+        lastError = err;
+        const status = err.response ? err.response.status : null;
+        console.warn(`⚠️ Model ${model} failed (${status || err.code}): ${err.message}. Trying fallback...`);
+        if (status === 400) {
+          throw err;
+        }
       }
+    }
+
+    if (aiResponse) {
+      return res.json({
+        success: true,
+        response: aiResponse
+      });
+    }
+
+    if (lastError) {
+      throw lastError;
     }
 
     // Invalid response format
